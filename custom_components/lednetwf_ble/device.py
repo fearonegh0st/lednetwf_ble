@@ -41,7 +41,14 @@ from .const import (
     get_iotbt_effects,
 )
 from . import protocol
-from .hc3_scenes import HC3_SCENE_PRODUCT_IDS, HC3_SCENES, build_hc3_scene_payload
+from .hc3_scenes import (
+    HC3_DEFAULT_POINTS,
+    HC3_PALETTES,
+    HC3_SCENE_PRODUCT_IDS,
+    HC3_SCENES,
+    build_hc3_palette_payload,
+    build_hc3_scene_payload,
+)
 from .capabilities import CAPABILITIES
 from .commands import (
     build_command,
@@ -294,7 +301,7 @@ class LEDNetWFDevice:
     def effect_list(self) -> list[str]:
         """Return list of available effects."""
         if self.is_hc3_scene_device:
-            return list(HC3_SCENES)
+            return list(HC3_PALETTES) + list(HC3_SCENES)
         return get_effect_list(
             self.effect_type, self.has_bg_color, self.has_ic_config,
             self.has_builtin_mic, self.has_candle_mode,
@@ -1067,7 +1074,7 @@ class LEDNetWFDevice:
         #   payload[17:19] = LEDs per segment (big-endian)
         # Source: issue #83 (samoswall) capture, verified by the 57->60 change.
         # Gated on segment: on Telink IOTBT these bytes mean something else.
-        if self.is_iotbt_segment and len(data) >= 19:
+        if (self.is_iotbt_segment or self.is_hc3_scene_device) and len(data) >= 19:
             self._segments = data[16] & 0xFF
             self._led_count = (data[17] << 8) | data[18]
             _LOGGER.debug(
@@ -2005,8 +2012,9 @@ class LEDNetWFDevice:
         self, effect_name: str, speed: int | None, brightness: int | None
     ) -> bool:
         """Play a built-in scene on an hc3 device (0xE1 0x21)."""
+        palette = HC3_PALETTES.get(effect_name)
         scene = HC3_SCENES.get(effect_name)
-        if scene is None:
+        if palette is None and scene is None:
             _LOGGER.warning("Unknown effect: %s", effect_name)
             return False
         if brightness is None:
@@ -2016,14 +2024,19 @@ class LEDNetWFDevice:
         brightness_pct = max(1, round(brightness * 100 / 255))
         if speed is None and self._effect == effect_name and self._effect_speed > 0:
             speed = self._effect_speed
-        payload = build_hc3_scene_payload(scene, brightness_pct, speed)
+        if palette is not None:
+            points = min(self.total_leds or HC3_DEFAULT_POINTS, 300)
+            payload = build_hc3_palette_payload(palette, brightness_pct, points)
+        else:
+            payload = build_hc3_scene_payload(scene, brightness_pct, speed)
         packet = protocol.wrap_command(payload, cmd_family=0x0B)
         _LOGGER.debug(
             "Setting hc3 scene: %s, speed=%s, brightness=%d%%", effect_name, speed, brightness_pct
         )
         if await self._send_command(packet):
             self._effect = effect_name
-            self._effect_speed = speed if speed is not None else scene.speed
+            if scene is not None:
+                self._effect_speed = speed if speed is not None else scene.speed
             self._brightness = brightness
             self._is_on = True
             self._notify_callbacks()
