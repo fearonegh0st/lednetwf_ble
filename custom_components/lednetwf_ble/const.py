@@ -34,7 +34,11 @@ IOTBT_PROTOCOL_V3: Final = "v3"
 # colour_data_v3 / switch_led_v3 / protocol common2_0 in the vendor app's
 # ble_devices.json, and confirmed on hardware to ignore the Telink 0xE2 colour
 # command while accepting 0xE0 0x01. Source: PR #101.
-IOTBT_V3_PRODUCT_IDS: Final = frozenset({62})
+# Product 197 (0xC5): hc3 "carrier wave symphony" controller, e.g. the Aurelux
+# Christmas tree (IOTBT525). The vendor device database lists colour_data_v3 /
+# switch_led_v3 for it; confirmed on hardware that it ignores the 0xE2 Telink
+# and 0xE1 0x03 segment colour commands but follows 0xE0 0x01.
+IOTBT_V3_PRODUCT_IDS: Final = frozenset({62, 197})
 IOTBT_PROTOCOL_CHOICES: Final = (
     IOTBT_PROTOCOL_AUTO,
     IOTBT_PROTOCOL_TELINK,

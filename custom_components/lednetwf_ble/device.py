@@ -41,6 +41,7 @@ from .const import (
     get_iotbt_effects,
 )
 from . import protocol
+from .hc3_scenes import HC3_SCENE_PRODUCT_IDS, HC3_SCENES, build_hc3_scene_payload
 from .capabilities import CAPABILITIES
 from .commands import (
     build_command,
@@ -292,6 +293,8 @@ class LEDNetWFDevice:
     @property
     def effect_list(self) -> list[str]:
         """Return list of available effects."""
+        if self.is_hc3_scene_device:
+            return list(HC3_SCENES)
         return get_effect_list(
             self.effect_type, self.has_bg_color, self.has_ic_config,
             self.has_builtin_mic, self.has_candle_mode,
@@ -347,7 +350,14 @@ class LEDNetWFDevice:
     @property
     def has_effects(self) -> bool:
         """Return True if device supports effects."""
+        if self.is_hc3_scene_device:
+            return True
         return self.effect_type != EffectType.NONE
+
+    @property
+    def is_hc3_scene_device(self) -> bool:
+        """Return True for hc3 devices whose scenes use 0xE1 0x21 (see hc3_scenes)."""
+        return self._advertised_product_id in HC3_SCENE_PRODUCT_IDS
 
     @property
     def needs_probing(self) -> bool:
@@ -1881,6 +1891,9 @@ class LEDNetWFDevice:
             _LOGGER.warning("Device %s does not support effects", self._name)
             return False
 
+        if self.is_hc3_scene_device:
+            return await self._set_hc3_scene(effect_name, speed, brightness)
+
         eff_type = self.effect_type
         effect_id = get_effect_id(
             effect_name, eff_type, self.has_bg_color, self.has_ic_config,
@@ -1984,6 +1997,35 @@ class LEDNetWFDevice:
             self._effect = effect_name
             self._effect_speed = speed
             self._brightness = brightness
+            self._notify_callbacks()
+            return True
+        return False
+
+    async def _set_hc3_scene(
+        self, effect_name: str, speed: int | None, brightness: int | None
+    ) -> bool:
+        """Play a built-in scene on an hc3 device (0xE1 0x21)."""
+        scene = HC3_SCENES.get(effect_name)
+        if scene is None:
+            _LOGGER.warning("Unknown effect: %s", effect_name)
+            return False
+        if brightness is None:
+            brightness = self._brightness
+        if not brightness or brightness <= 0:
+            brightness = 255
+        brightness_pct = max(1, round(brightness * 100 / 255))
+        if speed is None and self._effect == effect_name and self._effect_speed > 0:
+            speed = self._effect_speed
+        payload = build_hc3_scene_payload(scene, brightness_pct, speed)
+        packet = protocol.wrap_command(payload, cmd_family=0x0B)
+        _LOGGER.debug(
+            "Setting hc3 scene: %s, speed=%s, brightness=%d%%", effect_name, speed, brightness_pct
+        )
+        if await self._send_command(packet):
+            self._effect = effect_name
+            self._effect_speed = speed if speed is not None else scene.speed
+            self._brightness = brightness
+            self._is_on = True
             self._notify_callbacks()
             return True
         return False
