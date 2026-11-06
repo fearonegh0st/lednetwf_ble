@@ -122,3 +122,39 @@ def build_hc3_scene_payload(
     for color in colors:
         payload += _color_bytes(*color)
     return bytearray(payload)
+
+
+# Static multi-colour palettes (the Aurelux app's Color tab palette swatches).
+# Sent with the P3 static-colourful command, built by
+# command_protocol_lib/wifi&ble/P3_1314_EC.dart ::buildP3StaticColorfulCmd and
+# voice_control_ii_color_biz_component ::sendP3IIStaticColorful:
+#
+#     EC 01 00 brightness  then for every LED point: hs_hi hs_lo v cct cctV
+#
+# The app fills every point with the palette colours repeated in order
+# (point i gets colours[i % len(colours)]). Colours are (hue, sat, value).
+HC3_PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
+    "Amy's Christmas": ((0, 100, 100), (120, 100, 100), (240, 100, 100),
+                        (180, 100, 100), (275, 100, 100), (60, 100, 100)),
+    "Red & Green": ((0, 100, 100), (120, 100, 100)),
+    "Red, White & Blue": ((0, 100, 100), (0, 0, 100), (240, 100, 100)),
+    "Yellow & Red": ((60, 100, 100), (0, 100, 100)),
+    "Purple & Orange": ((275, 100, 100), (30, 100, 100)),
+}
+
+HC3_DEFAULT_POINTS = 16
+
+
+def build_hc3_palette_payload(
+    colors: tuple[tuple[int, int, int], ...],
+    brightness: int = 100,
+    points: int = HC3_DEFAULT_POINTS,
+) -> bytearray:
+    """Build the raw 0xEC 0x01 static palette payload (no transport header)."""
+    if not colors:
+        raise ValueError("colors is empty")
+    payload = [0xEC, 0x01, 0x00, max(1, min(100, brightness))]
+    for i in range(max(1, points)):
+        h, s, v = colors[i % len(colors)]
+        payload += _color_bytes(h, s, v, 0, 0)
+    return bytearray(payload)
