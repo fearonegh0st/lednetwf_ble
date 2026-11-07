@@ -44,9 +44,11 @@ from . import protocol
 from .hc3_scenes import (
     HC3_DEFAULT_POINTS,
     HC3_PALETTES,
+    HC3_RANDOM_PALETTES,
     HC3_SCENE_PRODUCT_IDS,
     HC3_SCENES,
     build_hc3_palette_payload,
+    build_hc3_random_palette_payload,
     build_hc3_scene_payload,
 )
 from .capabilities import CAPABILITIES
@@ -301,7 +303,7 @@ class LEDNetWFDevice:
     def effect_list(self) -> list[str]:
         """Return list of available effects."""
         if self.is_hc3_scene_device:
-            return list(HC3_PALETTES) + list(HC3_SCENES)
+            return list(HC3_RANDOM_PALETTES) + list(HC3_PALETTES) + list(HC3_SCENES)
         return get_effect_list(
             self.effect_type, self.has_bg_color, self.has_ic_config,
             self.has_builtin_mic, self.has_candle_mode,
@@ -2012,9 +2014,10 @@ class LEDNetWFDevice:
         self, effect_name: str, speed: int | None, brightness: int | None
     ) -> bool:
         """Play a built-in scene on an hc3 device (0xE1 0x21)."""
+        random_palette = HC3_RANDOM_PALETTES.get(effect_name)
         palette = HC3_PALETTES.get(effect_name)
         scene = HC3_SCENES.get(effect_name)
-        if palette is None and scene is None:
+        if random_palette is None and palette is None and scene is None:
             _LOGGER.warning("Unknown effect: %s", effect_name)
             return False
         if brightness is None:
@@ -2024,7 +2027,9 @@ class LEDNetWFDevice:
         brightness_pct = max(1, round(brightness * 100 / 255))
         if speed is None and self._effect == effect_name and self._effect_speed > 0:
             speed = self._effect_speed
-        if palette is not None:
+        if random_palette is not None:
+            payload = build_hc3_random_palette_payload(random_palette, brightness_pct)
+        elif palette is not None:
             points = min(self.total_leds or HC3_DEFAULT_POINTS, 300)
             payload = build_hc3_palette_payload(palette, brightness_pct, points)
         else:
