@@ -134,7 +134,7 @@ def build_hc3_scene_payload(
 # The app fills every point with the palette colours repeated in order
 # (point i gets colours[i % len(colours)]). Colours are (hue, sat, value).
 HC3_PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
-    "Amy's Christmas": ((0, 100, 100), (120, 100, 100), (240, 100, 100),
+    "Amy's Christmas Stripes": ((0, 100, 100), (120, 100, 100), (240, 100, 100),
                         (180, 100, 100), (275, 100, 100), (60, 100, 100)),
     "Red & Green": ((0, 100, 100), (120, 100, 100)),
     "Red, White & Blue": ((0, 100, 100), (0, 0, 100), (240, 100, 100)),
@@ -156,5 +156,29 @@ def build_hc3_palette_payload(
     payload = [0xEC, 0x01, 0x00, max(1, min(100, brightness))]
     for i in range(max(1, points)):
         h, s, v = colors[i % len(colors)]
+        payload += _color_bytes(h, s, v, 0, 0)
+    return bytearray(payload)
+
+
+# Random static palettes: the device scatters the palette colours across its
+# LEDs itself. P3_1314_EC.dart ::buildP3StaticColorfulRandomCmd:
+#
+#     EC 07 00 brightness count  then count x [hs_hi hs_lo v cct cctV]
+HC3_RANDOM_PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
+    "Amy's Christmas": ((0, 100, 100), (120, 100, 100), (240, 100, 100),
+                        (180, 100, 100), (275, 100, 100), (60, 100, 100)),
+}
+
+
+def build_hc3_random_palette_payload(
+    colors: tuple[tuple[int, int, int], ...],
+    brightness: int = 100,
+) -> bytearray:
+    """Build the raw 0xEC 0x07 random palette payload (no transport header)."""
+    if not colors:
+        raise ValueError("colors is empty")
+    colors = colors[:255]
+    payload = [0xEC, 0x07, 0x00, max(1, min(100, brightness)), len(colors)]
+    for h, s, v in colors:
         payload += _color_bytes(h, s, v, 0, 0)
     return bytearray(payload)
